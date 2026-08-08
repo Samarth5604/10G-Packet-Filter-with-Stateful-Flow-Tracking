@@ -1,0 +1,6 @@
+# Pinned exactly. cocotb has had a major-version API break; a floating
+# constraint means a clean clone can fail for reasons unrelated to this repo.
+cocotb==1.9.2
+cocotb-bus==0.2.1
+pytest==8.3.4
+scapy==2.6.1
