@@ -1,0 +1,15 @@
+; Warning policy, declared once for the whole tree.
+;
+; dev     : all warnings visible, none fatal. An unused variable mid-edit must
+;           not stop the build.
+; release : the same warnings, fatal. CI and any tagged build reject them.
+;
+; Disabled throughout: 4 (fragile match), 9 (missing record fields in pattern),
+; 40/41/42 (constructor and label disambiguation), 44/45 (shadowing by open),
+; 70 (missing .mli). All are noise given how the spec types are written.
+
+(env
+ (dev
+  (flags (:standard -w +a-4-9-40-41-42-44-45-70 -warn-error -a)))
+ (release
+  (flags (:standard -w +a-4-9-40-41-42-44-45-70 -warn-error +a))))

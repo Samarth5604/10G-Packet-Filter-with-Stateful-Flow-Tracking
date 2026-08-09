@@ -15,18 +15,22 @@ help:
 	@echo "derive      validate spec, print derived bounds        [implemented]"
 	@echo "docs        regenerate docs/protocol.md                [implemented]"
 	@echo "docs-check  fail if docs/protocol.md is stale          [implemented]"
-	@echo "model       build + self-test OCaml golden model       [not implemented]"
+	@echo "model       build + self-test OCaml golden model       [implemented]"
 	@echo "sim         Verilator differential regression          [not implemented]"
 	@echo "formal      SymbiYosys proofs                          [not implemented]"
 	@echo "synth       out-of-context synthesis -> $(REPORTS)/    [needs rtl/]"
 
-all: derive docs-check
+all: derive model docs-check
 
 # ---------------------------------------------------------------- implemented
 
 derive:
 	dune build @all
 	dune exec test/derive.exe
+
+model:
+	dune build @all
+	dune exec test/model_test.exe
 
 docs:
 	dune exec bin/gen_docs.exe > docs/protocol.md
@@ -46,10 +50,6 @@ docs-check:
 
 # ------------------------------------------------------------ not implemented
 # These fail rather than no-op. A green build must mean the work was done.
-
-model:
-	@echo "NOT IMPLEMENTED: OCaml golden model. See docs/adr/0006-scope-freeze.md"
-	@exit 1
 
 sim:
 	@echo "NOT IMPLEMENTED: Verilator differential regression."
