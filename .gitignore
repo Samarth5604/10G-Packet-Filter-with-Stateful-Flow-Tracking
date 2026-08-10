@@ -12,4 +12,4 @@ docs/protocol.md.new
 vivado*/
 # reports/ IS committed: ADR 0006 makes a post-route timing report one of the
 # five completion conditions, so it is evidence, not build output.
-# reports/*.rpt
+# reports/*.rpt_opam/
