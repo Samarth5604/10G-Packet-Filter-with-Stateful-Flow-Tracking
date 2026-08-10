@@ -9,18 +9,20 @@ TOP       ?= header_parser
 RTL_DIR   := rtl
 REPORTS   := reports
 
-.PHONY: all derive docs docs-check model sim formal synth clean help
+.PHONY: all derive docs docs-check model stimulus rtl sim formal synth clean help
 
 help:
 	@echo "derive      validate spec, print derived bounds        [implemented]"
 	@echo "docs        regenerate docs/protocol.md                [implemented]"
 	@echo "docs-check  fail if docs/protocol.md is stale          [implemented]"
 	@echo "model       build + self-test OCaml golden model       [implemented]"
+	@echo "stimulus    generator round-trip against the model     [implemented]"
+	@echo "rtl         generate rtl/header_parser.v via Hardcaml  [implemented]"
 	@echo "sim         Verilator differential regression          [not implemented]"
 	@echo "formal      SymbiYosys proofs                          [not implemented]"
 	@echo "synth       out-of-context synthesis -> $(REPORTS)/    [needs rtl/]"
 
-all: derive model docs-check
+all: derive model stimulus docs-check
 
 # ---------------------------------------------------------------- implemented
 
@@ -31,6 +33,17 @@ derive:
 model:
 	dune build @all
 	dune exec test/model_test.exe
+
+stimulus:
+	dune build @all
+	dune exec test/stimulus_test.exe
+
+# Generated, and committed: syn/ and any clone must build without an opam
+# switch. Regenerate and commit whenever the spec changes.
+rtl:
+	dune build @all
+	dune exec bin/gen_rtl.exe > rtl/header_parser.v
+	@echo "regenerated rtl/header_parser.v"
 
 docs:
 	dune exec bin/gen_docs.exe > docs/protocol.md
@@ -62,8 +75,8 @@ formal:
 # ------------------------------------------------------------------ toolchain
 
 synth:
-	@if [ ! -d "$(RTL_DIR)" ]; then \
-	  echo "ERROR: no $(RTL_DIR)/ yet -- nothing to synthesise."; exit 1; fi
+	@if [ ! -f "$(RTL_DIR)/$(TOP).v" ]; then \
+	  echo "ERROR: no $(RTL_DIR)/$(TOP).v -- run 'make rtl' first."; exit 1; fi
 	@if ! command -v vivado > /dev/null 2>&1; then \
 	  echo "ERROR: vivado not on PATH. source env/vivado.sh first."; exit 1; fi
 	@mkdir -p $(REPORTS)

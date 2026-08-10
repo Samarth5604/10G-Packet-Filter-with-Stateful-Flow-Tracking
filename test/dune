@@ -1,3 +1,3 @@
 (tests
- (names derive model_test)
+ (names derive model_test stimulus_test)
  (libraries protocol))

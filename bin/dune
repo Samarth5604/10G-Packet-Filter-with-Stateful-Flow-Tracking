@@ -1,3 +1,3 @@
-(executable
- (name gen_docs)
- (libraries protocol))
+(executables
+ (names gen_docs gen_rtl)
+ (libraries protocol hardcaml))
