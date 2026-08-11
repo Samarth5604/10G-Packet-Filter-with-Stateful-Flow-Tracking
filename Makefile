@@ -45,7 +45,8 @@ rtl:
 	dune build @all
 	dune exec bin/gen_rtl.exe > rtl/header_parser.v
 	dune exec bin/gen_crc.exe > rtl/crc32_par.v
-	@echo "regenerated rtl/header_parser.v rtl/crc32_par.v"
+	dune exec bin/gen_crc.exe -- --ooc > rtl/crc32_par_ooc.v
+	@echo "regenerated rtl/header_parser.v rtl/crc32_par.v rtl/crc32_par_ooc.v"
 
 crc:
 	dune build @all

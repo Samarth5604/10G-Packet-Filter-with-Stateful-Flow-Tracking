@@ -40,5 +40,7 @@ jobs:
           opam exec -- dune build @all
           opam exec -- dune exec bin/gen_rtl.exe > /tmp/header_parser.v
           opam exec -- dune exec bin/gen_crc.exe  > /tmp/crc32_par.v
+          opam exec -- dune exec bin/gen_crc.exe -- --ooc > /tmp/crc32_par_ooc.v
+          diff -u rtl/crc32_par_ooc.v /tmp/crc32_par_ooc.v
           diff -u rtl/header_parser.v /tmp/header_parser.v
           diff -u rtl/crc32_par.v     /tmp/crc32_par.v

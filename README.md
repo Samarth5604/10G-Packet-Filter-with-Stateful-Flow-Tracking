@@ -1,5 +1,7 @@
 # Line-rate 10G packet filter with stateful flow tracking
 
+![ci](https://github.com/Samarth5604/10G-Packet-Filter-with-Stateful-Flow-Tracking/actions/workflows/ci.yml/badge.svg)
+
 A cut-through Ethernet/IPv4 packet filter for `XCZU7EV-FFVC1156-2-E`, generated
 from a single declarative protocol description, verified against an OCaml golden
 model and bounded-induction proofs.

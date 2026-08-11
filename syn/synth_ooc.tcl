@@ -95,26 +95,55 @@ proc worst_slack {paths} {
     return [get_property SLACK [lindex $paths 0]]
 }
 
-set r2r [get_timing_paths -delay_type max -max_paths 1 \
+set r2r [get_timing_paths -quiet -delay_type max -max_paths 1 \
              -from [all_registers] -to [all_registers]]
-set all [get_timing_paths -delay_type max -max_paths 1]
+set all [get_timing_paths -quiet -delay_type max -max_paths 1]
+# Hold is gated on INTERNAL paths only. Across an out-of-context boundary,
+# Vivado launches from an ideal external clock but captures on a flop that sees
+# BUFG insertion delay (~2.6 ns here), so port paths carry a fixed positive skew
+# that flatters setup and penalises hold by the same amount. The router cannot
+# compensate: port nets have no HD.PARTPIN_LOCS, so no detour is available.
+# In the assembled design both flops are internal and share the clock tree, so
+# that skew does not exist. Port hold is reported below as information, never
+# as a pass/fail criterion -- and raising set_input_delay -min until it passes
+# would be tuning the constraint to fit the answer.
+set hld [get_timing_paths -quiet -delay_type min -max_paths 1 \
+             -from [all_registers] -to [all_registers]]
+set hld_io [get_timing_paths -quiet -delay_type min -max_paths 1]
 
 set wns_r2r [worst_slack $r2r]
 set wns_all [worst_slack $all]
+set whs     [worst_slack $hld]
+set whs_io  [worst_slack $hld_io]
 
-report_timing -of_objects $r2r -file $rpt_dir/${top}_critical_path.rpt
+if {[llength $r2r] > 0} {
+    report_timing -of_objects $r2r -file $rpt_dir/${top}_critical_path.rpt
+}
 
 puts "==================================================================="
 puts " $top on $part"
 puts "   period          : 6.400 ns (156.25 MHz)"
 puts "   WNS reg-to-reg  : $wns_r2r ns"
 puts "   WNS overall     : $wns_all ns  (includes budgeted port paths)"
+puts "   WHS hold (r2r)  : $whs ns"
+puts "   WHS hold (all)  : $whs_io ns  (port paths: OOC artifact, not gated)"
 if {$wns_r2r ne "n/a"} {
     puts [format "   max frequency   : %.1f MHz" [expr {1000.0 / (6.400 - $wns_r2r)}]]
+} else {
+    puts "   NOTE: no register-to-register paths. Every path is port-to-register,"
+    puts "         so this slack reflects the I/O budget and clock insertion delay"
+    puts "         rather than the logic. Synthesise the registered-input variant"
+    puts "         (make rtl; make synth TOP=${top}_ooc) to measure logic depth."
 }
 puts "==================================================================="
 
-if {$wns_all ne "n/a" && $wns_all < 0} {
-    puts "TIMING FAILED"
-    exit 1
+# Gate on BOTH setup and hold. Checking setup alone reported a clean pass on a
+# design Vivado had already flagged with a timing CRITICAL WARNING.
+set failed 0
+if {$wns_all ne "n/a" && $wns_all < 0} { puts "SETUP FAILED"; set failed 1 }
+if {$whs     ne "n/a" && $whs     < 0} { puts "HOLD FAILED (internal)"; set failed 1 }
+if {$whs eq "n/a"} {
+    puts "NOTE: no internal paths to hold-check. This block is combinational"
+    puts "      between ports; characterise ${top}_ooc instead."
 }
+if {$failed} { exit 1 }

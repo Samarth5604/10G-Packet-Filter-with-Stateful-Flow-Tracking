@@ -55,7 +55,20 @@ let bytes_from_keep keep =
   in
   sum
 
-let create () =
+(* Characterisation wrapper.
+   ---------------------------------------------------------------------------
+   crc32_par has no register-to-register paths: every path runs port -> XOR
+   tree -> output register. Synthesised standalone, the reported slack is
+   dominated by the arbitrary input/output delay budget and by clock insertion
+   delay on the capture flop against an ideal external launch flop -- which is
+   also why hold fails there, and why the router cannot fix it (port nets have
+   no HD.PARTPIN_LOCS, so no detour is available).
+
+   Registering the inputs makes the measured path register -> XOR tree -> mux
+   -> register, which is the actual logic depth and is what the block will see
+   once instantiated next to the parser. Used for `make synth` only; the design
+   itself instantiates the unregistered crc32_par. *)
+let create ?(ooc = false) () =
   let clock = input "clock" 1 in
   let clear = input "clear" 1 in
   let en = input "en" 1 in
@@ -63,6 +76,14 @@ let create () =
   let data = input "data" 64 in
   let keep = input "keep" 8 in
   let spec = Reg_spec.create ~clock ~clear () in
+
+  (* In the characterisation build, every input passes through a register first
+     so the combinational logic sits between two real flops. *)
+  let reg_if x = if ooc then reg spec x else x in
+  let crc_in = reg_if crc_in in
+  let data = reg_if data in
+  let keep = reg_if keep in
+  let en = reg_if en in
 
   let nbytes = bytes_from_keep keep in
 
@@ -77,13 +98,16 @@ let create () =
      running CRC. *)
   let crc_out = reg spec ~enable:en selected in
 
-  Circuit.create_exn ~name:"crc32_par"
+  Circuit.create_exn ~name:(if ooc then "crc32_par_ooc" else "crc32_par")
     [ output "crc_out" crc_out ]
 
 let () =
+  let ooc = Array.exists (fun a -> a = "--ooc") Sys.argv in
   let mx8 = Crc_spec.matrix_for_bytes 8 in
   prerr_endline
     (Printf.sprintf
-       "crc32_par: %d-bit state, 8 widths (8..64 bits), worst XOR fan-in %d"
+       "%s: %d-bit state, 8 widths (8..64 bits), worst XOR fan-in %d"
+       (if ooc then "crc32_par_ooc (registered inputs, for characterisation)"
+        else "crc32_par")
        width (Crc_spec.max_terms mx8));
-  Rtl.print Verilog (create ())
+  Rtl.print Verilog (create ~ooc ())

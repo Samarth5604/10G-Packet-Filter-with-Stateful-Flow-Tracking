@@ -1,0 +1,18 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2024.1 (lin64) Build 5076996 Wed May 22 18:36:09 MDT 2024
+| Date              : Tue Aug 11 09:23:26 2026
+| Host              : localhost.localdomain running 64-bit unknown
+| Command           : report_timing -of_objects [get_timing_paths -delay_type max -max_paths 1 -from [all_registers] -to [all_registers]] -file reports/crc32_par_critical_path.rpt
+| Design            : crc32_par
+| Device            : xczu7ev-ffvc1156
+| Speed File        : -2  PRODUCTION 1.30 05-15-2022
+| Design State      : Routed
+| Temperature Grade : E
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+No timing paths found.
+
+
