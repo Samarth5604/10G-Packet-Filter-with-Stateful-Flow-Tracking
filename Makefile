@@ -9,7 +9,7 @@ TOP       ?= header_parser
 RTL_DIR   := rtl
 REPORTS   := reports
 
-.PHONY: all derive docs docs-check model stimulus rtl sim formal synth clean help
+.PHONY: all derive docs docs-check model stimulus crc rtl sim formal synth clean help
 
 help:
 	@echo "derive      validate spec, print derived bounds        [implemented]"
@@ -17,12 +17,13 @@ help:
 	@echo "docs-check  fail if docs/protocol.md is stale          [implemented]"
 	@echo "model       build + self-test OCaml golden model       [implemented]"
 	@echo "stimulus    generator round-trip against the model     [implemented]"
-	@echo "rtl         generate rtl/header_parser.v via Hardcaml  [implemented]"
+	@echo "rtl         generate rtl/*.v via Hardcaml              [implemented]"
+	@echo "crc         self-test the parallel CRC32 derivation    [implemented]"
 	@echo "sim         Verilator differential regression          [not implemented]"
 	@echo "formal      SymbiYosys proofs                          [not implemented]"
 	@echo "synth       out-of-context synthesis -> $(REPORTS)/    [needs rtl/]"
 
-all: derive model stimulus docs-check
+all: derive model stimulus crc docs-check
 
 # ---------------------------------------------------------------- implemented
 
@@ -43,7 +44,12 @@ stimulus:
 rtl:
 	dune build @all
 	dune exec bin/gen_rtl.exe > rtl/header_parser.v
-	@echo "regenerated rtl/header_parser.v"
+	dune exec bin/gen_crc.exe > rtl/crc32_par.v
+	@echo "regenerated rtl/header_parser.v rtl/crc32_par.v"
+
+crc:
+	dune build @all
+	dune exec test/crc_test.exe
 
 docs:
 	dune exec bin/gen_docs.exe > docs/protocol.md

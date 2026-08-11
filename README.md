@@ -85,7 +85,8 @@ make docs        # regenerate docs/protocol.md             [implemented]
 make docs-check  # fail if the committed copy is stale     [implemented]
 make model       # OCaml golden model self-test             [implemented]
 make stimulus    # generator round-trip vs the model        [implemented]
-make rtl         # Hardcaml -> rtl/header_parser.v          [implemented]
+make crc         # parallel CRC32 derivation self-test      [implemented]
+make rtl         # Hardcaml -> rtl/*.v                       [implemented]
 make sim         # Verilator differential regression       [not implemented]
 make formal      # SymbiYosys proofs                       [not implemented]
 make synth       # out-of-context synthesis -> reports/    [needs rtl/]
@@ -100,6 +101,7 @@ build means the named work was actually done. `make help` lists current status.
 lib/           protocol description (the single source) + derivations
                golden_model.ml -- reference parser, an interpreter over it
                stimulus.ml -- the spec run backwards, parametric profiles
+               crc_spec.ml -- parallel CRC32 matrices from the polynomial
 bin/           gen_docs, gen_rtl -- documentation and RTL backends
 test/          spec validation, derived bounds, golden-model self-test; CI
 rtl/           generated and hand-written Verilog          (empty)
