@@ -17,4 +17,8 @@
   "Cut-through Ethernet/IPv4 packet filter generated from a single declarative\nprotocol description, verified against an OCaml golden model and\nbounded-induction proofs. Simulation and formal only; see README.")
  (depends
   (ocaml (>= 4.14))
-  (dune (>= 3.0))))
+  (dune (>= 3.0))
+  ; Required by bin/gen_rtl.ml and bin/gen_crc.ml. `dune build @all` builds
+  ; every executable, so CI cannot get past the build step without it --
+  ; omitting it here is invisible locally, where the switch already has it.
+  hardcaml))

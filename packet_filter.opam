@@ -8,6 +8,7 @@ bounded-induction proofs. Simulation and formal only; see README."""
 depends: [
   "ocaml" {>= "4.14"}
   "dune" {>= "3.0" & >= "3.0"}
+  "hardcaml"
   "odoc" {with-doc}
 ]
 build: [
