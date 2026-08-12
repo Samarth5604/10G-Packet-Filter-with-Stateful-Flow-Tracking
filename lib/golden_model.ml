@@ -12,6 +12,13 @@
 open Protocol_spec
 
 type reason =
+  (* The frame did not fill the parse window, so no field offset is meaningful.
+     This DOMINATES every other verdict, matching the RTL: the parser shifts
+     beats into a buffer and beat 0 only reaches its final position after the
+     window is full, so with fewer beats every extraction points at the wrong
+     bytes. A short frame with an unmatched EtherType has no EtherType to be
+     unmatched about. See docs/adr/0002-first-order-spec.md. *)
+  | Frame_too_short of { got_beats : int; need_beats : int }
   | Truncated of string             (* layer name: frame ended mid-header *)
   | Unmatched_selector of string * int
   | Guard_failed of string          (* g_reason *)
@@ -84,8 +91,14 @@ let key_hex parts =
 
 (* --- the interpreter ----------------------------------------------------- *)
 
-let parse st frame =
+(* [datapath_bits] is a hardware parameter, not a protocol one, but truncation
+   semantics depend on it: the window is filled a beat at a time. Defaulting to
+   64 keeps existing callers working. *)
+let parse ?(datapath_bits = 64) st frame =
   let nbits = 8 * Bytes.length frame in
+  let bytes_per_beat = datapath_bits / 8 in
+  let got_beats = ceil_div (Bytes.length frame) bytes_per_beat in
+  let need_beats = cut_through_beats ~datapath_bits st in
   let stop reason path fields key at =
     (* key_hex is deliberately empty on failure. Exports from layers parsed
        before the failure are retained in key_parts for debugging, but a
@@ -170,11 +183,15 @@ let parse st frame =
         end
       end
   in
-  go st.entry 0 [] [] [] []
+  if got_beats < need_beats then
+    stop (Frame_too_short { got_beats; need_beats }) [] [] [] (Bytes.length frame)
+  else go st.entry 0 [] [] [] []
 
 (* --- reporting ----------------------------------------------------------- *)
 
 let string_of_reason = function
+  | Frame_too_short { got_beats; need_beats } ->
+    Printf.sprintf "frame too short: %d of %d beats" got_beats need_beats
   | Truncated l -> Printf.sprintf "truncated in %s" l
   | Unmatched_selector (f, v) -> Printf.sprintf "unmatched %s = 0x%X" f v
   | Guard_failed r -> Printf.sprintf "guard %s" r
@@ -192,3 +209,28 @@ let to_string r =
     (String.concat "/" (List.map fst r.path))
     (if r.key_hex = "" then "-" else r.key_hex)
     r.decided_at
+
+(* --- projection onto the RTL error code ---------------------------------- *)
+
+(* The model distinguishes six reasons carrying layer, field and value; the RTL
+   encodes three bits. Comparison in the differential regression happens at THIS
+   granularity, and the mapping is defined here rather than in the testbench so
+   both sides read it from one place. Changing an encoding means changing this
+   table and bin/gen_rtl.ml together.
+
+   0 none | 1 short/truncated | 2 unmatched selector | 3 guard | 4 bad field
+   5 repeat limit *)
+let err_code = function
+  | Parsed -> 0
+  | Unparseable (Frame_too_short _) -> 1
+  | Unparseable (Truncated _) -> 1
+  | Unparseable (Unmatched_selector _) -> 2
+  | Unparseable (Guard_failed _) -> 3
+  | Unparseable (Bad_field_value _) -> 4
+  | Unparseable (Repeat_limit _) -> 5
+  | Unparseable (Unknown_layer _) -> 2
+
+let err_name = function
+  | 0 -> "none" | 1 -> "short_or_truncated" | 2 -> "unmatched_selector"
+  | 3 -> "guard_failed" | 4 -> "bad_field_value" | 5 -> "repeat_limit"
+  | n -> Printf.sprintf "unknown(%d)" n

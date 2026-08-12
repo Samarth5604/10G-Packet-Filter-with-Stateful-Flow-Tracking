@@ -90,80 +90,76 @@ let build buf =
   let a =
     { terminals = []; e_selector = []; e_guard = []; e_field = []; e_repeat = [] }
   in
-  let rec go name off cond counts keyparts =
-    match find_layer st name with
-    | None -> ()
-    | Some l ->
-      let used = try List.assoc name counts with Not_found -> 0 in
-      if used >= l.max_repeats then a.e_repeat <- cond :: a.e_repeat
-      else begin
-        let counts = (name, used + 1) :: List.remove_assoc name counts in
-        let need = layer_read_bytes l in
-        if off + need > window_bytes then
-          failwith
-            (Printf.sprintf "%s at %d needs %d B, past the %d B window"
-               name off need window_bytes);
-        let rd fn =
-          fld buf
-            ~off_bits:((off * 8) + field_offset l fn)
-            ~w:(field_or_fail l fn).width
-        in
-        (* Constrained fields inside the read depth are checked. Fields beyond
-           it are not read, so they cannot be checked without widening the
-           window. Same rule as the golden model. *)
-        let checks =
-          List.filter_map
-            (fun f ->
-               if field_end l f.fname <= need * 8
-                  && f.values <> Any && f.values <> Derived
-               then Some (in_set (rd f.fname) f.values)
-               else None)
-            l.fields
-        in
-        let fields_ok = all_of checks in
-        if checks <> [] then a.e_field <- (cond &: ~:fields_ok) :: a.e_field;
-        let cond = cond &: fields_ok in
-        let keyparts = keyparts @ List.map (fun e -> rd e) l.exports in
-        match l.next with
-        | Payload -> a.terminals <- (cond, concat_msb keyparts) :: a.terminals
-        | Switch { sw_field; cases; default; require } ->
-          let gok =
-            all_of (List.map (fun g -> in_set (rd g.g_field) g.g_values) require)
-          in
-          if require <> [] then a.e_guard <- (cond &: ~:gok) :: a.e_guard;
-          let cond = cond &: gok in
-          let sel = rd sw_field in
-          let span = span_of l in
-          (* Group cases by TARGET LAYER before recursing. Several selector
-             values may reach the same layer -- 0x8100 and 0x88A8 both reach
-             vlan -- and those share every offset downstream, differing only in
-             one comparison. Recursing per case value expands the same layer
-             sequence twice and emits 14 terminal paths where 6 suffice, each
-             carrying a redundant 104-bit key select. Grouping keeps the decode
-             one-hot over layer sequences, which is what the offsets depend on. *)
-          let targets =
-            List.fold_left
-              (fun acc (v, nxt) ->
-                 match List.assoc_opt nxt acc with
-                 | Some vs -> (nxt, v :: vs) :: List.remove_assoc nxt acc
-                 | None -> (nxt, [ v ]) :: acc)
-              [] cases
-          in
-          let hits =
-            List.map
-              (fun (nxt, vs) ->
-                 let hit = any_of (List.map (fun v -> eqi sel v) vs) in
-                 go nxt (off + span) (cond &: hit) counts keyparts;
-                 hit)
-              targets
-          in
-          let matched = any_of hits in
-          (match default with
-           | Some d -> go d (off + span) (cond &: ~:matched) counts keyparts
-           | None -> a.e_selector <- (cond &: ~:matched) :: a.e_selector)
-      end
+  (* Everything a layer contributes before its successor is chosen: bounds check,
+     accepted-value checks on constrained fields inside the read depth, and the
+     exports appended to the key. Shared by terminal and branch nodes. *)
+  let prologue (n : Protocol_spec.node) cond keyparts =
+    let l = n.n_layer and off = n.n_offset in
+    let need = layer_read_bytes l in
+    if off + need > window_bytes then
+      failwith
+        (Printf.sprintf "%s at %d needs %d B, past the %d B window"
+           l.lname off need window_bytes);
+    let rd fn =
+      fld buf ~off_bits:((off * 8) + field_offset l fn) ~w:(field_or_fail l fn).width
+    in
+    (* Constrained fields inside the read depth are checked. Fields beyond it are
+       not read, so they cannot be checked without widening the window. Same rule
+       as the golden model. *)
+    let checks =
+      List.filter_map
+        (fun f ->
+           if field_end l f.fname <= need * 8
+              && f.values <> Any && f.values <> Derived
+           then Some (in_set (rd f.fname) f.values)
+           else None)
+        l.fields
+    in
+    let fields_ok = all_of checks in
+    if checks <> [] then a.e_field <- (cond &: ~:fields_ok) :: a.e_field;
+    let cond = cond &: fields_ok in
+    let keyparts = keyparts @ List.map (fun e -> rd e) l.exports in
+    (rd, cond, keyparts)
   in
-  go st.entry 0 vdd [] [];
+  (* Recursion over the SHARED tree from Protocol_spec. The layer-graph logic --
+     repeat bounds, offsets, and grouping selector values by target layer -- is
+     not repeated here; only the mapping from that structure onto conditions. *)
+  let rec go (t : Protocol_spec.tree) cond keyparts =
+    match t with
+    | Stop _ -> a.e_repeat <- cond :: a.e_repeat
+    | Leaf n ->
+      let _, cond, keyparts = prologue n cond keyparts in
+      a.terminals <- (cond, concat_msb keyparts) :: a.terminals
+    | Branch (n, edges) ->
+      let rd, cond, keyparts = prologue n cond keyparts in
+      (* Assert the span is static. The tree's offsets are worst case; fixed
+         offset extraction is only valid when worst case equals actual. *)
+      ignore (span_of n.n_layer);
+      (match n.n_layer.next with
+       | Payload -> ()
+       | Switch { sw_field; require; _ } ->
+         let gok =
+           all_of (List.map (fun g -> in_set (rd g.g_field) g.g_values) require)
+         in
+         if require <> [] then a.e_guard <- (cond &: ~:gok) :: a.e_guard;
+         let cond = cond &: gok in
+         let sel = rd sw_field in
+         let taken =
+           List.filter_map
+             (fun (e : Protocol_spec.edge) ->
+                if e.e_default then None
+                else Some (e, any_of (List.map (fun v -> eqi sel v) e.e_values)))
+             edges
+         in
+         let matched = any_of (List.map snd taken) in
+         List.iter (fun (e, hit) -> go e.Protocol_spec.e_tree (cond &: hit) keyparts) taken;
+         (match List.find_opt (fun (e : Protocol_spec.edge) -> e.e_default) edges with
+          | Some d -> go d.e_tree (cond &: ~:matched) keyparts
+          | None -> a.e_selector <- (cond &: ~:matched) :: a.e_selector))
+  in
+  (match reachable st with
+   | None -> failwith "entry layer not found"
+   | Some t -> go t vdd []);
   a
 
 (* --- circuit ------------------------------------------------------------- *)
@@ -181,23 +177,54 @@ let create () =
      the beat, matching the network bit order the offsets assume. *)
   let swapped = concat_msb (List.init 8 (fun i -> select in_data ((8 * i) + 7) (8 * i))) in
 
-  (* Shift register: each beat enters at the LSB, so after [beats] beats the
-     first beat has reached the MSB. *)
-  let buf =
-    reg_fb spec ~enable:in_valid ~width:wbits ~f:(fun b ->
-        select (b @: swapped) (wbits - 1) 0)
-  in
+  (* Beat counter, saturating at the window size. *)
   let beat_ct =
     reg_fb spec ~enable:in_valid ~width:cw ~f:(fun c ->
         mux2 (c ==: of_int ~width:cw beats) c (c +: of_int ~width:cw 1))
   in
   let full = beat_ct ==: of_int ~width:cw beats in
 
-  (* tlast before the window is filled: the header is incomplete. *)
-  let truncated =
-    reg_fb spec ~width:1 ~f:(fun q ->
-        q |: (in_valid &: in_last &: (beat_ct <: of_int ~width:cw (beats - 1))))
+  (* Shift register: each beat enters at the LSB, so after [beats] beats the
+     first beat has reached the MSB and every extraction offset is correct.
+     THE SHIFT MUST STOP THERE. A frame is longer than the window -- 96 bytes is
+     12 beats against a 6-beat window -- and continuing to shift walks byte 0
+     out of the buffer, leaving the extraction logic reading payload as headers.
+     Freezing on [full] also stops the buffer toggling on every payload beat.
+
+     The alternative, having the caller drive only the first [beats] beats,
+     leaks the parse window into the interface: the cut-through control would
+     have to know a parser-internal parameter and replicate the truncation. The
+     block's contract is "give me a frame, get a classification".
+
+     Found by the differential regression, which failed 91 of 100 packets on its
+     first run -- every VLAN and QinQ frame. Invisible to the golden model,
+     which reads a byte array and has no notion of beats. *)
+  let buf =
+    reg_fb spec ~enable:(in_valid &: ~:full) ~width:wbits ~f:(fun b ->
+        select (b @: swapped) (wbits - 1) 0)
   in
+
+  (* A frame is SHORT when tlast arrives before the window has been filled.
+     [beat_ct] counts beats already accepted, so the beat carrying tlast is
+     number beat_ct+1, and the frame is short when beat_ct + 1 < beats.
+
+     This must be COMBINATIONAL, not just registered. The decode below is
+     combinational on [buf] in the same cycle, and it runs on a half-filled
+     buffer whose extraction offsets point at whatever happens to be there --
+     typically producing a spurious unmatched-selector. A registered flag
+     arrives a cycle too late to mask that, and since the outputs are registered
+     too, the wrong error is what gets captured.
+
+     Found by the differential regression: 3023 of 100000 smoke packets, 7506 of
+     50000 adversarial, every one a frame under 27 bytes where the verdict
+     agreed and only the reason differed. The sticky register is kept so the
+     condition holds through to the sample point; the combinational term is what
+     makes the masking correct on the deciding cycle. *)
+  let short_now =
+    in_valid &: in_last &: (beat_ct <: of_int ~width:cw (beats - 1))
+  in
+  let truncated_r = reg_fb spec ~width:1 ~f:(fun q -> q |: short_now) in
+  let truncated = truncated_r |: short_now in
 
   let a = build buf in
   let parsed = any_of (List.map fst a.terminals) &: ~:truncated in
@@ -235,9 +262,14 @@ let create () =
 
 let () =
   validate st;
+  (* Terminal paths come from the shared traversal, not from a second call to
+     [build]. Building the circuit twice allocated Hardcaml signal UIDs before
+     [create] ran, so every wire name in the emitted Verilog shifted whenever
+     this line changed -- producing large, meaningless diffs in committed RTL
+     and in the CI diff gate. *)
   prerr_endline
     (Printf.sprintf
        "header_parser: %d B window, %d beats, %d-bit key, %d terminal paths"
        window_bytes beats key_width
-       (List.length (build (zero wbits)).terminals));
+       (List.length (all_paths st)));
   Rtl.print Verilog (create ())

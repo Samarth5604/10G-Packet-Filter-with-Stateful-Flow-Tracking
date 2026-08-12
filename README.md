@@ -1,7 +1,5 @@
 # Line-rate 10G packet filter with stateful flow tracking
 
-![ci](https://github.com/Samarth5604/10G-Packet-Filter-with-Stateful-Flow-Tracking/actions/workflows/ci.yml/badge.svg)
-
 A cut-through Ethernet/IPv4 packet filter for `XCZU7EV-FFVC1156-2-E`, generated
 from a single declarative protocol description, verified against an OCaml golden
 model and bounded-induction proofs.
@@ -89,7 +87,8 @@ make model       # OCaml golden model self-test             [implemented]
 make stimulus    # generator round-trip vs the model        [implemented]
 make crc         # parallel CRC32 derivation self-test      [implemented]
 make rtl         # Hardcaml -> rtl/*.v                       [implemented]
-make sim         # Verilator differential regression       [not implemented]
+make vectors     # stimulus + expected results -> sim/      [implemented]
+make sim         # Verilator differential regression        [implemented]
 make formal      # SymbiYosys proofs                       [not implemented]
 make synth       # out-of-context synthesis -> reports/    [needs rtl/]
 ```

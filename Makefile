@@ -9,7 +9,7 @@ TOP       ?= header_parser
 RTL_DIR   := rtl
 REPORTS   := reports
 
-.PHONY: all derive docs docs-check model stimulus crc rtl sim formal synth clean help
+.PHONY: all derive docs docs-check model stimulus crc rtl vectors sim formal synth clean help
 
 help:
 	@echo "derive      validate spec, print derived bounds        [implemented]"
@@ -19,7 +19,8 @@ help:
 	@echo "stimulus    generator round-trip against the model     [implemented]"
 	@echo "rtl         generate rtl/*.v via Hardcaml              [implemented]"
 	@echo "crc         self-test the parallel CRC32 derivation    [implemented]"
-	@echo "sim         Verilator differential regression          [not implemented]"
+	@echo "vectors     stimulus + expected results -> sim/         [implemented]"
+	@echo "sim         Verilator differential regression          [implemented]"
 	@echo "formal      SymbiYosys proofs                          [not implemented]"
 	@echo "synth       out-of-context synthesis -> $(REPORTS)/    [needs rtl/]"
 
@@ -71,9 +72,24 @@ docs-check:
 # ------------------------------------------------------------ not implemented
 # These fail rather than no-op. A green build must mean the work was done.
 
-sim:
-	@echo "NOT IMPLEMENTED: Verilator differential regression."
-	@exit 1
+# Vector generation is separate from the run: regenerating is cheap, but a
+# regression should be reproducible from a fixed file, and the file records
+# which profile and seed produced a failure.
+VEC_PROFILE ?= smoke
+VEC_COUNT   ?= 10000
+VEC_SEED    ?=
+
+vectors:
+	dune build @all
+	dune exec bin/gen_vectors.exe -- $(VEC_PROFILE) $(VEC_COUNT) $(VEC_SEED) \
+	  > sim/vectors.txt
+	@wc -l < sim/vectors.txt | xargs printf "sim/vectors.txt: %s packets\n"
+
+sim: vectors
+	@command -v verilator > /dev/null 2>&1 || { \
+	  echo "ERROR: verilator not on PATH. source env/oss.sh first."; exit 1; }
+	@[ -f rtl/header_parser.v ] || { echo "ERROR: run 'make rtl' first."; exit 1; }
+	$(MAKE) -C sim
 
 formal:
 	@echo "NOT IMPLEMENTED: SymbiYosys proofs."
@@ -92,4 +108,6 @@ synth:
 
 clean:
 	dune clean
+	$(MAKE) -C sim clean 2>/dev/null || true
+	rm -f sim/vectors.txt
 	rm -rf $(REPORTS) docs/protocol.md.new

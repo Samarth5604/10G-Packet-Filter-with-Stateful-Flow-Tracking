@@ -160,61 +160,130 @@ let layer_read_bytes l =
   in
   ceil_div (List.fold_left max 0 ends) 8
 
-(* Worst-case bytes the parser must see before the last classification decision
-   is available. THIS IS THE LATENCY NUMBER. It sets the cut-through threshold,
-   and therefore the pipeline depth of the generated RTL. Derived once, consumed
-   by every backend, so the RTL and the model cannot disagree about it. *)
-let max_parse_bytes st =
-  let rec go name counts =
+(* --- the traversal ------------------------------------------------------- *)
+
+(* THE layer-graph walk. Everything that needs to know the shape of the parse --
+   the derived bounds, the stimulus generator's path list, the RTL decoder --
+   folds over the tree this produces. It exists because the walk was previously
+   written out four times and the same bug appeared in two of them: recursing
+   per SELECTOR VALUE instead of per TARGET LAYER, so a layer sequence reachable
+   by two ethertypes (0x8100 and 0x88A8 both reach vlan) was expanded twice.
+   Grouping happens here, once, and consumers cannot reintroduce it.
+
+   Offsets are worst case: [layer_span_bytes] uses the largest value the length
+   field accepts. For the shipped spec every span is static (ihl is constrained
+   to {5}), so worst case equals actual -- gen_rtl asserts that separately and
+   refuses to emit fixed-offset extraction if it ever stops holding. *)
+
+type node = {
+  n_layer  : layer;
+  n_offset : int;          (* byte offset of this layer from frame start *)
+  n_path   : string list;  (* layer names, entry first, including this one *)
+}
+
+type edge = {
+  e_values  : int list;    (* selector values that take this edge *)
+  e_default : bool;        (* true for the Switch default, which has no values *)
+  e_target  : string;
+  e_tree    : tree;
+}
+
+and tree =
+  | Leaf of node           (* next = Payload: the parse ends here *)
+  | Stop of node           (* max_repeats reached: this layer cannot be entered *)
+  | Branch of node * edge list
+
+let reachable st =
+  let rec go name off path counts =
     match find_layer st name with
-    | None -> 0                                   (* unknown -> treat as payload *)
+    | None -> None
     | Some l ->
+      let path = path @ [ name ] in
+      let node = { n_layer = l; n_offset = off; n_path = path } in
       let used = try List.assoc name counts with Not_found -> 0 in
-      if used >= l.max_repeats then 0             (* repeat bound hit: bail *)
-      else
+      if used >= l.max_repeats then Some (Stop node)
+      else begin
         let counts = (name, used + 1) :: List.remove_assoc name counts in
         match l.next with
-        | Payload -> layer_read_bytes l
+        | Payload -> Some (Leaf node)
         | Switch { cases; default; _ } ->
-          let succs =
-            List.map snd cases
-            @ (match default with Some d -> [ d ] | None -> [])
+          let span = layer_span_bytes l in
+          (* group cases by target layer, preserving first-seen order *)
+          let targets =
+            List.fold_left
+              (fun acc (v, nxt) ->
+                 match List.assoc_opt nxt acc with
+                 | Some vs -> List.remove_assoc nxt acc @ [ (nxt, vs @ [ v ]) ]
+                 | None -> acc @ [ (nxt, [ v ]) ])
+              [] cases
           in
-          let deepest =
-            List.fold_left (fun acc n -> max acc (go n counts)) 0 succs
+          let edges =
+            List.filter_map
+              (fun (nxt, vs) ->
+                 match go nxt (off + span) path counts with
+                 | None -> None
+                 | Some t ->
+                   Some { e_values = vs; e_default = false; e_target = nxt; e_tree = t })
+              targets
           in
-          layer_span_bytes l + deepest
+          let edges =
+            match default with
+            | None -> edges
+            | Some d ->
+              (match go d (off + span) path counts with
+               | None -> edges
+               | Some t ->
+                 edges
+                 @ [ { e_values = []; e_default = true; e_target = d; e_tree = t } ])
+          in
+          Some (Branch (node, edges))
+      end
   in
-  go st.entry []
+  go st.entry 0 [] []
 
-(* Width of the flow key. Must be a MAX OVER PATHS, not a sum over layers:
-   UDP and TCP both export ports, but no packet traverses both. Summing gives
-   136 bits and sizes the table 30% too wide. *)
+(* Bottom-up fold. [branch] receives each edge paired with its folded subtree. *)
+let rec fold_tree ~leaf ~stop ~branch t =
+  match t with
+  | Leaf n -> leaf n
+  | Stop n -> stop n
+  | Branch (n, es) ->
+    branch n (List.map (fun e -> (e, fold_tree ~leaf ~stop ~branch e.e_tree)) es)
+
+let fold st ~leaf ~stop ~branch ~empty =
+  match reachable st with
+  | None -> empty
+  | Some t -> fold_tree ~leaf ~stop ~branch t
+
+(* Distinct layer sequences from entry to a terminal. Six for the shipped spec. *)
+let all_paths st =
+  fold st ~empty:[]
+    ~leaf:(fun n -> [ n.n_path ])
+    ~stop:(fun _ -> [])
+    ~branch:(fun _ rs -> List.concat_map snd rs)
+
+(* Worst-case bytes the parser must see before the last classification decision
+   is available. THIS IS THE LATENCY NUMBER. It sets the cut-through threshold,
+   and therefore the pipeline depth of the generated RTL. *)
+let max_parse_bytes st =
+  fold st ~empty:0
+    ~leaf:(fun n -> layer_read_bytes n.n_layer)
+    ~stop:(fun _ -> 0)
+    ~branch:(fun n rs ->
+        layer_span_bytes n.n_layer
+        + List.fold_left (fun acc (_, r) -> max acc r) 0 rs)
+
+(* Width of the flow key. A MAX OVER PATHS, not a sum over layers: UDP and TCP
+   both export ports, but no packet traverses both. Summing gives 136 bits and
+   sizes the table 30% too wide. *)
 let export_bits st =
   let own l =
     List.fold_left (fun a n -> a + (field_or_fail l n).width) 0 l.exports
   in
-  let rec go name counts =
-    match find_layer st name with
-    | None -> 0
-    | Some l ->
-      let used = try List.assoc name counts with Not_found -> 0 in
-      if used >= l.max_repeats then 0
-      else
-        let counts = (name, used + 1) :: List.remove_assoc name counts in
-        let deepest =
-          match l.next with
-          | Payload -> 0
-          | Switch { cases; default; _ } ->
-            let succs =
-              List.map snd cases
-              @ (match default with Some d -> [ d ] | None -> [])
-            in
-            List.fold_left (fun acc n -> max acc (go n counts)) 0 succs
-        in
-        own l + deepest
-  in
-  go st.entry []
+  fold st ~empty:0
+    ~leaf:(fun n -> own n.n_layer)
+    ~stop:(fun _ -> 0)
+    ~branch:(fun n rs ->
+        own n.n_layer + List.fold_left (fun acc (_, r) -> max acc r) 0 rs)
 
 let cut_through_beats ~datapath_bits st =
   ceil_div (max_parse_bytes st * 8) datapath_bits

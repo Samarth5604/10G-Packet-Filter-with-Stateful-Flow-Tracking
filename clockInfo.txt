@@ -1,6 +1,6 @@
 -------------------------------------
 | Tool Version : Vivado v.2024.1
-| Date         : Tue Aug 11 09:38:48 2026
+| Date         : Tue Aug 11 14:12:48 2026
 | Host         : localhost.localdomain
 | Design       : design_1
 | Device       : xczu7ev-ffvc1156-2-E-
@@ -28,7 +28,7 @@ Clock Net Route Info (CRP Input)
 Clock 1: clock
 	Clock source type: BUFG_DIV
 	Clock source region: X0Y4
-	initial rect ((0, 4), (3, 5))
+	initial rect ((0, 4), (0, 4))
 
 
 

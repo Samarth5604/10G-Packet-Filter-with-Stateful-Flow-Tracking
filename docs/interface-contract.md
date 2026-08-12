@@ -33,6 +33,14 @@ The final beat carries 1 to 8 valid bytes. This is what forces a variable-width
 CRC update in a single cycle (ADR 0007) and is the same alignment problem the
 header parser solves.
 
+**`header_parser` does not consume `tkeep`.** It takes `in_data`, `in_valid` and
+`in_last` only. Classification needs a fixed 46-byte window, and any frame
+reaching the DUT is at least 60 bytes, so byte-granular length carries no
+information the parser can act on. The consequence is that the parser cannot
+distinguish a frame ending mid-header from one padded to the same length; the
+golden model can. See `docs/adr/0002-first-order-spec.md`. Blocks that do need
+byte granularity -- `crc32_par` above all -- take `keep` directly.
+
 ### 2. When the FCS verdict is valid
 
 At `tlast`, and not before. The CRC covers the whole frame, so no verdict exists

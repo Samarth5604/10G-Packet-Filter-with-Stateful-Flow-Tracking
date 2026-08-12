@@ -78,29 +78,14 @@ let string_of_defect = function
   | Frame_truncated -> "frame_truncated"
   | Repeats_exceeded -> "repeats_exceeded"
 
-(* --- path enumeration ---------------------------------------------------- *)
+(* --- paths --------------------------------------------------------------- *)
 
-(* All complete paths from entry to a Payload layer, respecting max_repeats.
-   For the shipped spec this is six: {eth, eth+vlan, eth+qinq} x {udp, tcp}. *)
-let all_paths st =
-  (* Distinct LAYER SEQUENCES. Several selector values may reach the same layer
-     (0x8100 and 0x88A8 both reach vlan); those are one path here, and the
-     specific case is chosen at emission so both values still get exercised. *)
-  let rec go name counts acc =
-    match find_layer st name with
-    | None -> []
-    | Some l ->
-      let used = try List.assoc name counts with Not_found -> 0 in
-      if used >= l.max_repeats then []
-      else
-        let counts = (name, used + 1) :: List.remove_assoc name counts in
-        let acc = name :: acc in
-        (match l.next with
-         | Payload -> [ List.rev acc ]
-         | Switch { cases; _ } ->
-           List.concat_map (fun (_, nxt) -> go nxt counts acc) cases)
-  in
-  List.sort_uniq compare (go st.entry [] [])
+(* [Protocol_spec.all_paths] is THE traversal, shared with the derived bounds
+   and the RTL decoder. This module previously walked the layer graph itself and
+   got the grouping wrong: recursing per selector value rather than per target
+   layer expanded the same sequence twice (0x8100 and 0x88A8 both reach vlan),
+   giving 14 paths instead of 6 and skewing the depth weighting. *)
+let all_paths = Protocol_spec.all_paths
 
 (* --- randomness ---------------------------------------------------------- *)
 

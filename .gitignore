@@ -43,6 +43,7 @@ usage_statistics_webtalk*
 
 # ------------------------------------------------------------------ Simulation
 
+sim/vectors.txt
 sim_build/
 obj_dir/
 *.vcd

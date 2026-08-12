@@ -124,10 +124,33 @@ let () =
        (unparseable (function
             | Bad_field_value ("ipv4.ihl", 6) -> true | _ -> false)));
 
+  (* 18 bytes is 3 beats of a 6-beat window: no field offset is meaningful, so
+     the verdict is Frame_too_short regardless of what the bytes contain. *)
   ignore
-    (run "truncated in ipv4" (fun () ->
+    (run "short frame (3 of 6 beats)" (fun () ->
          eth 0x0800; u8 0x45; u8 0; u16 40)
-       (unparseable (function Truncated "ipv4" -> true | _ -> false)));
+       (unparseable (function
+            | Frame_too_short { got_beats = 3; need_beats = 6 } -> true
+            | _ -> false)));
+
+  (* 44 bytes fills the window (6 beats) but stops inside the 46-byte parse
+     depth, so a layer read runs past the frame end. The MODEL detects this;
+     the RTL CANNOT -- header_parser consumes in_last but not in_keep, so it
+     has no byte-granular length and would parse the padding as data.
+     This range (41..45 bytes) is unreachable in valid traffic: the DUT
+     interface minimum is 60 bytes (docs/interface-contract.md) and the
+     truncation defect generator cuts to 8..27 bytes. Recorded rather than
+     hidden -- if in_keep is ever added to the parser, this becomes a real
+     comparison point. *)
+  ignore
+    (run "mid-layer truncation (model-only)" (fun () ->
+         (* QinQ reaches 46 B, the deepest parse. 14+4+4+20 = 42 B of headers,
+            then 2 bytes: 44 B total. Six beats, so the window is full, but the
+            UDP read at 42..46 runs past the frame end. *)
+         eth 0x8100; vlan 100 0x8100; vlan 200 0x0800;
+         ipv4 ~proto:17 ~src:1 ~dst:2 ();
+         u16 1000)
+       (unparseable (function Truncated _ -> true | _ -> false)));
 
   ignore
     (run "unmatched ip protocol" (fun () ->
