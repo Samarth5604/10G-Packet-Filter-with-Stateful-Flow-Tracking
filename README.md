@@ -16,7 +16,7 @@ sources, and each is labelled as such wherever it appears:
 | *in cycle-accurate simulation* | Verilator, measured at the MAC AXI4-Stream boundary. Excludes PCS/PMA. |
 | *post-route in Vivado* | 2024.1, out-of-context, `XCZU7EV-FFVC1156-2-E`. |
 | *formally proved* | SymbiYosys, bounded induction, depth stated per property. Four properties; see `docs/adr/0006-scope-freeze.md`. |
-| *differentially verified over N packets* | RTL vs. OCaml golden model, zero divergence. |
+| *differentially verified over N packets* | RTL vs. OCaml golden model, zero divergence. Verdict, failure reason and extracted key are all compared. |
 
 Anything that cannot be phrased with one of those four verbs is not a result.
 The words "measured on hardware", "on-chip", "board", and "bring-up" do not

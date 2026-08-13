@@ -13,8 +13,17 @@ MODULE        := test_header_parser
 # the parent's directory and every relative path resolves one level too high.
 VERILOG_SOURCES := $(CURDIR)/../rtl/header_parser.v
 
-# Verilator needs the timescale the Verilog does not carry.
-EXTRA_ARGS += --timing --timescale 1ns/1ps
+# Verilator needs a timescale; the generated Verilog does not carry one.
+EXTRA_ARGS += --timescale 1ns/1ps
+
+# --timing exists only on Verilator 5.x and is rejected outright by 4.x, which
+# is what Ubuntu's apt package still ships. Probe rather than assume, so the
+# same Makefile works against the local OSS CAD Suite build (5.051) and a
+# distro package in CI.
+VERILATOR_HELP := $(shell verilator --help 2>&1)
+ifneq (,$(findstring -timing,$(VERILATOR_HELP)))
+EXTRA_ARGS += --timing
+endif
 
 export VECTORS ?= $(CURDIR)/vectors.txt
 

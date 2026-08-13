@@ -35,6 +35,19 @@ proof and differential testing. No hardware measurement is claimed.
 - The strongest available claims — bit-exactness of extraction, absence of
   sub-64-byte egress frames — become statistical rather than proved.
 
+## What CI can and cannot check
+
+CI runs everything that needs no proprietary toolchain, including a 20{,}000
+packet differential run against Verilator from apt. That number is small on
+purpose: its value is not coverage but **third-party reproducibility**. Vectors
+derive from a named profile and an integer seed, so anyone can regenerate the
+exact packets the job checked. The volume runs stay local and their results are
+committed under `reports/`.
+
+`make synth` cannot run in CI -- Vivado is not installable there -- so
+post-route timing is produced locally and committed as evidence rather than
+recomputed on every push.
+
 ## Consequences
 
 - Latency is reported at the MAC AXI4-Stream boundary, excluding PCS/PMA. The

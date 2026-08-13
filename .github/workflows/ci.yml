@@ -1,10 +1,16 @@
-# Runs everything that needs no FPGA toolchain: spec validation, the golden
-# model, the stimulus round-trip, the CRC derivation, and the generated-docs
-# staleness gate.
+# Runs everything that needs no proprietary toolchain: spec validation, the
+# golden model, the stimulus round-trip, the CRC derivation, the generated-docs
+# and generated-RTL staleness gates, and the Verilator differential regression.
 #
-# Vivado is not available here, so `make synth` is out of scope: post-route
+# Vivado is not available here, so `make synth` stays out of scope: post-route
 # timing is produced locally and committed under reports/ as evidence
 # (docs/adr/0006-scope-freeze.md).
+#
+# The differential run is deliberately small. Its value here is that it is
+# REPRODUCIBLE BY A THIRD PARTY -- vectors derive from a profile and a seed, so
+# anyone can regenerate the exact packets this job checked. The volume runs
+# (1M packets) stay local; a CI job is evidence the claim is checkable, not the
+# claim itself.
 
 name: ci
 
@@ -41,6 +47,36 @@ jobs:
           opam exec -- dune exec bin/gen_rtl.exe > /tmp/header_parser.v
           opam exec -- dune exec bin/gen_crc.exe  > /tmp/crc32_par.v
           opam exec -- dune exec bin/gen_crc.exe -- --ooc > /tmp/crc32_par_ooc.v
-          diff -u rtl/crc32_par_ooc.v /tmp/crc32_par_ooc.v
-          diff -u rtl/header_parser.v /tmp/header_parser.v
-          diff -u rtl/crc32_par.v     /tmp/crc32_par.v
+          diff -u rtl/header_parser.v  /tmp/header_parser.v
+          diff -u rtl/crc32_par.v      /tmp/crc32_par.v
+          diff -u rtl/crc32_par_ooc.v  /tmp/crc32_par_ooc.v
+
+      # --- differential regression ---------------------------------------
+      # Verilator from apt is older than the local OSS CAD Suite build, which
+      # is why sim/Makefile does not hardcode version-specific flags.
+      - name: install verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+          verilator --version
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install cocotb
+        run: pip install -r requirements.txt
+
+      - name: differential regression
+        run: opam exec -- make sim VEC_COUNT=20000
+
+      # results.xml records which tests ran and their status. Kept so a failing
+      # run can be inspected without reproducing it.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim-results
+          path: |
+            sim/results.xml
+            sim/vectors.txt
+          retention-days: 7
