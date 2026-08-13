@@ -53,19 +53,31 @@ jobs:
 
       # --- differential regression ---------------------------------------
       # Verilator from apt is older than the local OSS CAD Suite build, which
-      # is why sim/Makefile does not hardcode version-specific flags.
-      - name: install verilator
+      # is why sim/Makefile probes for --timing rather than hardcoding it.
+      #
+      # cocotb goes into the SYSTEM python deliberately. cocotb sets PYTHONHOME
+      # to the interpreter it embeds in the simulator; Verilator then runs its
+      # own helper script with /usr/bin/python3. With actions/setup-python those
+      # are different versions, the helper inherits a PYTHONHOME pointing at the
+      # wrong stdlib, and it dies with "No module named 'encodings'" during the
+      # C++ build -- after Verilator has already compiled the RTL successfully,
+      # which makes it look like a simulator problem rather than a Python one.
+      # One interpreter, no collision.
+      - name: install verilator and cocotb
         run: |
           sudo apt-get update
-          sudo apt-get install -y verilator
+          sudo apt-get install -y verilator python3-pip
           verilator --version
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: install cocotb
-        run: pip install -r requirements.txt
+          python3 --version
+          # PEP 668 marks the system python as externally managed; on a
+          # throwaway runner that is exactly what we want to override. cocotb
+          # 1.9.2 ships a cp312 wheel, so this is a download, not a source build.
+          pip install --break-system-packages -r requirements.txt || \
+            pip install -r requirements.txt
+          python3 -c "import cocotb; print('cocotb', cocotb.__version__)"
+          # cocotb-config must resolve, or sim/Makefile cannot find the cocotb
+          # makefiles and fails with a confusing "no rule to make target".
+          cocotb-config --makefiles
 
       - name: differential regression
         run: opam exec -- make sim VEC_COUNT=20000
