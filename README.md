@@ -86,6 +86,8 @@ make docs-check  # fail if the committed copy is stale     [implemented]
 make model       # OCaml golden model self-test             [implemented]
 make stimulus    # generator round-trip vs the model        [implemented]
 make crc         # parallel CRC32 derivation self-test      [implemented]
+make flowtable   # cuckoo hash model self-test              [implemented]
+make sweep       # occupancy sweep, picks table parameters  [implemented]
 make rtl         # Hardcaml -> rtl/*.v                       [implemented]
 make vectors     # stimulus + expected results -> sim/      [implemented]
 make sim         # Verilator differential regression        [implemented]
@@ -103,6 +105,7 @@ lib/           protocol description (the single source) + derivations
                golden_model.ml -- reference parser, an interpreter over it
                stimulus.ml -- the spec run backwards, parametric profiles
                crc_spec.ml -- parallel CRC32 matrices from the polynomial
+               flow_table.ml -- cuckoo hash model, reference for the RTL
 bin/           gen_docs, gen_rtl -- documentation and RTL backends
 test/          spec validation, derived bounds, golden-model self-test; CI
 rtl/           generated and hand-written Verilog          (empty)

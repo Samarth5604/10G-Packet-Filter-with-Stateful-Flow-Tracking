@@ -9,7 +9,7 @@ TOP       ?= header_parser
 RTL_DIR   := rtl
 REPORTS   := reports
 
-.PHONY: all derive docs docs-check model stimulus crc rtl vectors sim formal synth clean help
+.PHONY: all derive docs docs-check model stimulus crc flowtable sweep rtl vectors sim formal synth clean help
 
 help:
 	@echo "derive      validate spec, print derived bounds        [implemented]"
@@ -19,12 +19,14 @@ help:
 	@echo "stimulus    generator round-trip against the model     [implemented]"
 	@echo "rtl         generate rtl/*.v via Hardcaml              [implemented]"
 	@echo "crc         self-test the parallel CRC32 derivation    [implemented]"
+	@echo "flowtable   self-test the cuckoo hash model            [implemented]"
+	@echo "sweep       occupancy sweep -> eviction chain depth    [implemented]"
 	@echo "vectors     stimulus + expected results -> sim/         [implemented]"
 	@echo "sim         Verilator differential regression          [implemented]"
 	@echo "formal      SymbiYosys proofs                          [not implemented]"
 	@echo "synth       out-of-context synthesis -> $(REPORTS)/    [needs rtl/]"
 
-all: derive model stimulus crc docs-check
+all: derive model stimulus crc flowtable docs-check
 
 # ---------------------------------------------------------------- implemented
 
@@ -52,6 +54,22 @@ rtl:
 crc:
 	dune build @all
 	dune exec test/crc_test.exe
+
+flowtable:
+	dune build @all
+	dune exec test/flow_table_test.exe
+
+# Picks ways, eviction bound and stash depth for the RTL. Defaults are the
+# values ADR 0008 settled on; override to re-derive them.
+SWEEP_WAYS  ?= 4
+SWEEP_ROWS  ?= 14
+SWEEP_EVICT ?= 32
+SWEEP_STASH ?= 32
+
+sweep:
+	dune build @all
+	dune exec bin/gen_sweep.exe -- \
+	  $(SWEEP_WAYS) $(SWEEP_ROWS) $(SWEEP_EVICT) $(SWEEP_STASH)
 
 docs:
 	dune exec bin/gen_docs.exe > docs/protocol.md
