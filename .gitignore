@@ -2,6 +2,7 @@
 
 # dune's build tree. Everything in here is reproducible from source.
 _build/
+build/
 
 # LOCAL OPAM SWITCH. `opam switch create .` puts the entire OCaml compiler and
 # every dependency here -- roughly 32,000 files and 390 MB. It is a tool
@@ -45,6 +46,7 @@ usage_statistics_webtalk*
 
 sim/vectors.txt
 sim_build/
+build/
 obj_dir/
 *.vcd
 *.fst

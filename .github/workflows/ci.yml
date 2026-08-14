@@ -35,6 +35,7 @@ jobs:
       - run: opam exec -- make stimulus
       - run: opam exec -- make crc
       - run: opam exec -- make flowtable
+      - run: opam exec -- make pipeline
 
       # Documentation is generated. A stale committed copy is a build failure,
       # not a silently wrong document.

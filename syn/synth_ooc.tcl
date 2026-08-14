@@ -21,6 +21,11 @@ set top     [lindex $argv 1]
 set rtl_dir [lindex $argv 2]
 set rpt_dir [lindex $argv 3]
 set xdc     "syn/${top}.xdc"
+# Parameterised blocks share one constraints file: cam_d12_w104 and cam_d32_w104
+# differ only in depth, and the clock and I/O budget are identical.
+if {![file exists $xdc] && [string match "cam_d*" $top]} {
+    set xdc "syn/cam.xdc"
+}
 
 file mkdir $rpt_dir
 

@@ -27,4 +27,19 @@ endif
 
 export VECTORS ?= $(CURDIR)/vectors.txt
 
+# sim_build/ caches a cocotb-generated Vtop.mk with LDFLAGS/rpath baked in for
+# whichever cocotb `cocotb-config` resolved to at the time it was generated.
+# If the active environment changes between runs -- a different venv on PATH,
+# or forgetting to re-activate .venv after `source env/oss.sh` -- a stale
+# sim_build/ relinks against the wrong cocotb and fails at link time with
+# glibc symbol errors that look like an RTL problem and are not. make's
+# timestamp-based staleness check cannot see that cocotb-config's answer
+# changed, so it will not save you here.
+#
+# The whole build is a fraction of a second (Verilator reports its own
+# walltime above), so there is no cost to always starting clean. Force it
+# unconditionally rather than trust a cache that has already caused one
+# debugging session.
+$(shell rm -rf $(CURDIR)/sim_build $(CURDIR)/results.xml)
+
 include $(shell cocotb-config --makefiles)/Makefile.sim

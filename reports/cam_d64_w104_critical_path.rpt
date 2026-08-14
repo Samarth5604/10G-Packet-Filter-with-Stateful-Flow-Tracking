@@ -1,0 +1,105 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2024.1 (lin64) Build 5076996 Wed May 22 18:36:09 MDT 2024
+| Date              : Fri Aug 14 09:40:52 2026
+| Host              : localhost.localdomain running 64-bit unknown
+| Command           : report_timing -of_objects [get_timing_paths -quiet -delay_type max -max_paths 1 -from [all_registers] -to [all_registers]] -file reports/cam_d64_w104_critical_path.rpt
+| Design            : cam_d64_w104
+| Device            : xczu7ev-ffvc1156
+| Speed File        : -2  PRODUCTION 1.30 05-15-2022
+| Design State      : Routed
+| Temperature Grade : E
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (MET) :             3.283ns  (required time - arrival time)
+  Source:                 _772_reg[18]/C
+                            (rising edge-triggered cell FDRE clocked by clock  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            _1111_reg[1]/D
+                            (rising edge-triggered cell FDRE clocked by clock  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             clock
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.400ns  (clock rise@6.400ns - clock rise@0.000ns)
+  Data Path Delay:        2.933ns  (logic 0.998ns (34.032%)  route 1.935ns (65.968%))
+  Logic Levels:           10  (CARRY8=5 LUT2=1 LUT6=4)
+  Clock Path Skew:        -0.174ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    1.784ns = ( 8.184 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.116ns
+    Clock Pessimism Removal (CPR):    0.158ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clock rise edge)      0.000     0.000 r  
+                                                      0.000     0.000 r  clock (IN)
+                         net (fo=6733, unset)         2.116     2.116    clock
+    SLICE_X100Y291       FDRE                                         r  _772_reg[18]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X100Y291       FDRE (Prop_GFF2_SLICEL_C_Q)
+                                                      0.081     2.197 r  _772_reg[18]/Q
+                         net (fo=1, routed)           0.432     2.629    _772[18]
+    SLICE_X100Y292                                                    r  _1177_i_1797/I0
+    SLICE_X100Y292       LUT6 (Prop_G6LUT_SLICEL_I0_O)
+                                                      0.149     2.778 r  _1177_i_1797/O
+                         net (fo=1, routed)           0.008     2.786    _1177_i_1797_n_0
+    SLICE_X100Y292                                                    r  _1177_reg_i_1715/S[6]
+    SLICE_X100Y292       CARRY8 (Prop_CARRY8_SLICEL_S[6]_CO[7])
+                                                      0.115     2.901 r  _1177_reg_i_1715/CO[7]
+                         net (fo=1, routed)           0.026     2.927    _1177_reg_i_1715_n_0
+    SLICE_X100Y293                                                    r  _1177_reg_i_1433/CI
+    SLICE_X100Y293       CARRY8 (Prop_CARRY8_SLICEL_CI_CO[7])
+                                                      0.015     2.942 r  _1177_reg_i_1433/CO[7]
+                         net (fo=1, routed)           0.026     2.968    _1177_reg_i_1433_n_0
+    SLICE_X100Y294                                                    r  _1177_reg_i_1047/CI
+    SLICE_X100Y294       CARRY8 (Prop_CARRY8_SLICEL_CI_CO[7])
+                                                      0.015     2.983 r  _1177_reg_i_1047/CO[7]
+                         net (fo=1, routed)           0.026     3.009    _1177_reg_i_1047_n_0
+    SLICE_X100Y295                                                    r  _1177_reg_i_656/CI
+    SLICE_X100Y295       CARRY8 (Prop_CARRY8_SLICEL_CI_CO[7])
+                                                      0.015     3.024 r  _1177_reg_i_656/CO[7]
+                         net (fo=1, routed)           0.026     3.050    _1177_reg_i_656_n_0
+    SLICE_X100Y296                                                    r  _1177_reg_i_313/CI
+    SLICE_X100Y296       CARRY8 (Prop_CARRY8_SLICEL_CI_CO[2])
+                                                      0.057     3.107 r  _1177_reg_i_313/CO[2]
+                         net (fo=4, routed)           0.734     3.840    _773
+    SLICE_X93Y275                                                     r  _1177_i_112/I1
+    SLICE_X93Y275        LUT2 (Prop_D5LUT_SLICEM_I1_O)
+                                                      0.097     3.937 r  _1177_i_112/O
+                         net (fo=4, routed)           0.195     4.133    _774
+    SLICE_X93Y275                                                     r  _1111[1]_i_7/I2
+    SLICE_X93Y275        LUT6 (Prop_G6LUT_SLICEM_I2_O)
+                                                      0.150     4.283 r  _1111[1]_i_7/O
+                         net (fo=1, routed)           0.280     4.563    _1111[1]_i_7_n_0
+    SLICE_X89Y274                                                     r  _1111[1]_i_2/I2
+    SLICE_X89Y274        LUT6 (Prop_H6LUT_SLICEM_I2_O)
+                                                      0.152     4.715 r  _1111[1]_i_2/O
+                         net (fo=1, routed)           0.124     4.839    _1111[1]_i_2_n_0
+    SLICE_X89Y277                                                     r  _1111[1]_i_1/I0
+    SLICE_X89Y277        LUT6 (Prop_H6LUT_SLICEM_I0_O)
+                                                      0.152     4.991 r  _1111[1]_i_1/O
+                         net (fo=1, routed)           0.058     5.049    _1111[1]_i_1_n_0
+    SLICE_X89Y277        FDRE                                         r  _1111_reg[1]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clock rise edge)      6.400     6.400 r  
+                                                      0.000     6.400 r  clock (IN)
+                         net (fo=6733, unset)         1.784     8.184    clock
+    SLICE_X89Y277        FDRE                                         r  _1111_reg[1]/C
+                         clock pessimism              0.158     8.342    
+                         clock uncertainty           -0.035     8.306    
+    SLICE_X89Y277        FDRE (Setup_HFF_SLICEM_C_D)
+                                                      0.025     8.331    _1111_reg[1]
+  -------------------------------------------------------------------
+                         required time                          8.331    
+                         arrival time                          -5.049    
+  -------------------------------------------------------------------
+                         slack                                  3.283    
+
+
+
+

@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1786684848" />
+    <testcase name="differential" classname="test_header_parser" file="/home/samarth/Desktop/Jane_Street/10G-Packet-Filter-with-Stateful-Flow-Tracking/sim/test_header_parser.py" lineno="94" time="206.31903958320618" sim_time_ns="19378572.801" ratio_time="93925.27631064721" />
+  </testsuite>
+</testsuites>

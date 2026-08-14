@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version      : Vivado v.2024.1 (lin64) Build 5076996 Wed May 22 18:36:09 MDT 2024
-| Date              : Wed Aug 12 11:40:09 2026
+| Date              : Fri Aug 14 11:17:52 2026
 | Host              : localhost.localdomain running 64-bit unknown
 | Command           : report_timing -of_objects [get_timing_paths -quiet -delay_type max -max_paths 1 -from [all_registers] -to [all_registers]] -file reports/header_parser_critical_path.rpt
 | Design            : header_parser

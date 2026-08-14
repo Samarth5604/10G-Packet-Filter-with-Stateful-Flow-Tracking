@@ -1,7 +1,8 @@
 # 8. Flow table: 4-way cuckoo, multiply-shift hashing
 
 **Decision:** a 4-way cuckoo hash over a 104-bit key, each way indexed by a
-CRC32 with its own **polynomial**, `max_evict = 32`, `stash_depth = 32`.
+CRC32 with its own **polynomial**, `max_evict = 32`, `stash_depth = 8`,
+`pending_depth = 16`, operated at an **85% load factor**.
 
 Every parameter comes from the occupancy sweep in `bin/gen_sweep.ml`. None is
 asserted.
@@ -134,3 +135,97 @@ structure in the design to do the cheapest structure's job.
   `test/flow_table_test.ml`, not a comment. The original file carried a note
   saying independence was "not proved, only measured" -- and then did not
   measure it until the table failed.
+
+## The pending-insert race, and sizing its CAM
+
+An insert is not atomic in hardware. It is a URAM read-modify-write plus, if the
+chain runs, up to `max_evict` more of them -- and packets keep arriving
+throughout. Packets 2 and 3 of a new flow therefore miss a table that already
+has an insert in flight for their key, and request their own. Three inserts land
+for one key: duplicates, or a corrupted chain if they interleave.
+
+`lib/flow_pipeline.ml` is the same table WITH TIME, and exists to expose this.
+`lib/flow_table.ml` structurally cannot: it has no cycles, so every insert is
+atomic and the race does not exist there.
+
+**Measured.** A four-packet burst of one new flow at 85% load, packets every 10
+cycles: **3 duplicate inserts** without a pending CAM, **0** with one.
+
+**The race is load-dependent**, which is what makes it dangerous. Insert latency
+is 8 cycles at the median regardless of load -- under the 10.5-cycle
+inter-arrival at line rate, so nothing races on a quiet table. The tail is not:
+
+| load | median | p99 | max |
+|---|---|---|---|
+| 50% | 8 | 8 | 11 |
+| 70% | 8 | 14 | 23 |
+| 80% | 8 | 29 | 47 |
+| 85% | 8 | 50 | 92 |
+| 90% | 11 | 104 | 107 |
+
+So the race appears exactly when the table is under pressure and new flows are
+hardest to place -- the condition least likely to be reached by a short test on
+an empty table.
+
+**CAM depth**, all-new-flow traffic at 85% load:
+
+| depth | inserts dropped per 10,000 |
+|---|---|
+| 2 | 5,922 |
+| 4 | 2,605 |
+| 8 | **0** |
+| 16 | 0 |
+
+Maximum pending occupancy is 6, stable from 100 to 10,000 packets. **8 entries**,
+a quarter of the stash, on a structure that also sits on the per-packet path.
+
+Two measurement mistakes worth recording, both of which made the test pass while
+proving nothing:
+
+- The first `latency_for` probed the chain depth by inserting the key and then
+  deleting it. That places the key, so the next packet found it in the table and
+  the race could not occur. The measurement destroyed what it measured.
+- The burst then used an arbitrary key, which had a free candidate slot even at
+  85% load, so its insert completed in 8 cycles and retired before the next
+  packet. The test has to choose a key whose candidate slots are ALL occupied,
+  or it passes vacuously.
+
+## CAM cost, and why the operating point moved to 85%
+
+Both CAMs were synthesised out-of-context at five depths before either was
+sized. 104-bit entries, `XCZU7EV-FFVC1156-2-E`, 6.400 ns:
+
+| depth | LUTs | LUT/entry | FFs | WNS r2r |
+|---|---|---|---|---|
+| 8 | 308 | 38.5 | 848 | 4.364 |
+| 12 | 464 | 38.7 | 1270 | 3.350 |
+| 16 | 622 | 38.9 | 1690 | 3.877 |
+| 32 | 1255 | 39.2 | 3372 | 3.293 |
+| 64 | 2630 | 41.1 | 6734 | 3.283 |
+
+**Area is linear** at ~39 LUTs and ~105 flip-flops per entry (104 key bits plus
+a valid bit).
+
+**Latency is flat from 12 to 64.** Depth 12 measured *slower* than depth 16,
+which no structural effect can produce -- a larger CAM cannot be faster than a
+smaller one -- so the 322-491 MHz spread is placement variance, the same few
+percent that moved the parser's LUT count under a pure signal rename. Depth 8 is
+genuinely faster because it packs tightly.
+
+That flatness was not the prediction. The expectation was a step at 64 as the
+match-OR reduction went from two LUT6 levels to three. It does not appear, which
+says **the OR tree is not the critical path: the 104-bit equality comparison
+is**, and that is depth-independent. Adding entries adds width, not depth.
+
+**The consequence is a design change.** A 32-deep stash costs 1255 LUTs and 3372
+FFs -- more than seven times the entire header parser (169 LUTs). Both CAMs at
+the originally chosen depths would have dominated the design's logic.
+
+The occupancy sweep shows the stash is **empty at 85% load** and holds 24 entries
+at 90%. Operating five points lower costs 3,200 flows out of 58,900 -- about 5%
+of capacity on a table with 92% of headroom -- and buys back roughly 950 LUTs and
+2,500 flip-flops.
+
+This is the evict-versus-stash trade one level up: **the cheapest way to shrink
+the most expensive block is to run the table slightly emptier.** Stash depth 8,
+pending depth 16, operating point 85%.

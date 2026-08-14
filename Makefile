@@ -9,7 +9,7 @@ TOP       ?= header_parser
 RTL_DIR   := rtl
 REPORTS   := reports
 
-.PHONY: all derive docs docs-check model stimulus crc flowtable sweep rtl vectors sim formal synth clean help
+.PHONY: all derive docs docs-check model stimulus crc flowtable pipeline sweep rtl cam-sweep vectors sim formal synth clean help
 
 help:
 	@echo "derive      validate spec, print derived bounds        [implemented]"
@@ -18,15 +18,17 @@ help:
 	@echo "model       build + self-test OCaml golden model       [implemented]"
 	@echo "stimulus    generator round-trip against the model     [implemented]"
 	@echo "rtl         generate rtl/*.v via Hardcaml              [implemented]"
+	@echo "cam-sweep   synthesise the CAM at 8/12/16/32/64 deep   [needs vivado]"
 	@echo "crc         self-test the parallel CRC32 derivation    [implemented]"
 	@echo "flowtable   self-test the cuckoo hash model            [implemented]"
 	@echo "sweep       occupancy sweep -> eviction chain depth    [implemented]"
+	@echo "pipeline    timed model: pending-insert race + CAM depth [implemented]"
 	@echo "vectors     stimulus + expected results -> sim/         [implemented]"
 	@echo "sim         Verilator differential regression          [implemented]"
 	@echo "formal      SymbiYosys proofs                          [not implemented]"
 	@echo "synth       out-of-context synthesis -> $(REPORTS)/    [needs rtl/]"
 
-all: derive model stimulus crc flowtable docs-check
+all: derive model stimulus crc flowtable pipeline docs-check
 
 # ---------------------------------------------------------------- implemented
 
@@ -49,7 +51,8 @@ rtl:
 	dune exec bin/gen_rtl.exe > rtl/header_parser.v
 	dune exec bin/gen_crc.exe > rtl/crc32_par.v
 	dune exec bin/gen_crc.exe -- --ooc > rtl/crc32_par_ooc.v
-	@echo "regenerated rtl/header_parser.v rtl/crc32_par.v rtl/crc32_par_ooc.v"
+	dune exec bin/gen_cam.exe -- $(CAM_DEPTH) $(CAM_WIDTH) > rtl/cam.v
+	@echo "regenerated rtl/header_parser.v rtl/crc32_par.v rtl/crc32_par_ooc.v rtl/cam.v"
 
 crc:
 	dune build @all
@@ -59,12 +62,16 @@ flowtable:
 	dune build @all
 	dune exec test/flow_table_test.exe
 
+pipeline:
+	dune build @all
+	dune exec test/flow_pipeline_test.exe
+
 # Picks ways, eviction bound and stash depth for the RTL. Defaults are the
 # values ADR 0008 settled on; override to re-derive them.
 SWEEP_WAYS  ?= 4
 SWEEP_ROWS  ?= 14
 SWEEP_EVICT ?= 32
-SWEEP_STASH ?= 32
+SWEEP_STASH ?= 8
 
 sweep:
 	dune build @all
@@ -93,6 +100,35 @@ docs-check:
 # Vector generation is separate from the run: regenerating is cheap, but a
 # regression should be reproducible from a fixed file, and the file records
 # which profile and seed produced a failure.
+# CAM instances: the stash (32) and the pending-insert table (8..16). Depth is
+# swept by cam-sweep to compare area and logic depth.
+CAM_DEPTH ?= 8
+CAM_WIDTH ?= 104
+
+# Generate and synthesise a CAM at each depth, so the cost of a deeper CAM is
+# measured rather than estimated.
+#
+# Each depth goes into its own directory with a filename matching the module
+# name, because `make synth` guards on rtl/$$(TOP).v -- generating every depth
+# into rtl/cam.v made that guard fail silently and the sweep printed nothing.
+CAM_SWEEP_DIR := build/cam_sweep
+
+cam-sweep:
+	@mkdir -p $(CAM_SWEEP_DIR) $(REPORTS)
+	@for d in 8 12 16 32 64; do \
+	  top=cam_d$${d}_w$(CAM_WIDTH); \
+	  rm -f $(CAM_SWEEP_DIR)/*.v; \
+	  dune exec bin/gen_cam.exe -- $$d $(CAM_WIDTH) > $(CAM_SWEEP_DIR)/$$top.v; \
+	  echo "=== depth $$d ==="; \
+	  $(MAKE) --no-print-directory synth \
+	    RTL_DIR=$(CAM_SWEEP_DIR) TOP=$$top REPORTS=$(REPORTS) > $(CAM_SWEEP_DIR)/$$top.log 2>&1 \
+	    || echo "  synthesis failed -- see $(CAM_SWEEP_DIR)/$$top.log"; \
+	  grep -E "^\|[0-9]+ *\|(LUT|FDRE)" $(CAM_SWEEP_DIR)/$$top.log | \
+	    awk -F'|' '{gsub(/ /,"",$$3); gsub(/ /,"",$$4); printf "  %-6s %s\n", $$3, $$4}'; \
+	  grep -E "WNS reg-to-reg|WNS overall|max frequency" $(CAM_SWEEP_DIR)/$$top.log \
+	    | sed 's/^/  /'; \
+	done
+
 VEC_PROFILE ?= smoke
 VEC_COUNT   ?= 10000
 VEC_SEED    ?=

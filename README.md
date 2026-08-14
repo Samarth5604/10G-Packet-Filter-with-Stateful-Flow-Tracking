@@ -88,6 +88,7 @@ make stimulus    # generator round-trip vs the model        [implemented]
 make crc         # parallel CRC32 derivation self-test      [implemented]
 make flowtable   # cuckoo hash model self-test              [implemented]
 make sweep       # occupancy sweep, picks table parameters  [implemented]
+make pipeline    # timed model: the pending-insert race     [implemented]
 make rtl         # Hardcaml -> rtl/*.v                       [implemented]
 make vectors     # stimulus + expected results -> sim/      [implemented]
 make sim         # Verilator differential regression        [implemented]
@@ -106,6 +107,7 @@ lib/           protocol description (the single source) + derivations
                stimulus.ml -- the spec run backwards, parametric profiles
                crc_spec.ml -- parallel CRC32 matrices from the polynomial
                flow_table.ml -- cuckoo hash model, reference for the RTL
+               flow_pipeline.ml -- the same table WITH TIME; the race lives here
 bin/           gen_docs, gen_rtl -- documentation and RTL backends
 test/          spec validation, derived bounds, golden-model self-test; CI
 rtl/           generated and hand-written Verilog          (empty)
