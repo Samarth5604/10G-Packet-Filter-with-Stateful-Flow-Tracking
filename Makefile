@@ -25,7 +25,7 @@ help:
 	@echo "pipeline    timed model: pending-insert race + CAM depth [implemented]"
 	@echo "vectors     stimulus + expected results -> sim/         [implemented]"
 	@echo "sim         Verilator differential regression          [implemented]"
-	@echo "formal      SymbiYosys proofs                          [not implemented]"
+	@echo "formal      SymbiYosys proofs                          [partial -- see formal/README.md]"
 	@echo "synth       out-of-context synthesis -> $(REPORTS)/    [needs rtl/]"
 
 all: derive model stimulus crc flowtable pipeline docs-check
@@ -146,8 +146,21 @@ sim: vectors
 	$(MAKE) -C sim
 
 formal:
-	@echo "NOT IMPLEMENTED: SymbiYosys proofs."
-	@exit 1
+	@command -v sby > /dev/null 2>&1 || { \
+	  echo "ERROR: sby not on PATH. source env/oss.sh first."; exit 1; }
+	@[ -f rtl/header_parser.v ] || { echo "ERROR: run 'make rtl' first."; exit 1; }
+	@fail=0; \
+	for f in formal/*.sby; do \
+	  [ -e "$$f" ] || continue; \
+	  name=$$(basename $$f .sby); \
+	  echo "=== $$name ==="; \
+	  (cd formal && sby -f $$name.sby) || fail=1; \
+	done; \
+	if [ $$fail -ne 0 ]; then \
+	  echo "one or more formal proofs FAILED -- see formal/<name>/ for the counterexample trace"; \
+	  exit 1; \
+	fi
+	@echo "all formal proofs passed"
 
 # ------------------------------------------------------------------ toolchain
 

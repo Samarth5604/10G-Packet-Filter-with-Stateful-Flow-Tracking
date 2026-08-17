@@ -1,0 +1,34 @@
+[tasks]
+bmc
+prove
+pdr
+
+[options]
+bmc: mode bmc
+bmc: depth 40
+prove: mode prove
+prove: depth 20
+# pdr: no basecase/induction split and no depth to tune -- PDR (abc's IC3
+# implementation) searches for its own inductive strengthening over the
+# full design state space, including cam.v's real internal registers, even
+# though the property never names them. This is the remedy for exactly the
+# gap k-induction hit: it needed a hand-supplied invariant tying `holds` to
+# real internal state; PDR looks for one automatically instead. Caveat:
+# PDR can be slow or inconclusive on wide word-level comparisons (this
+# design does 104-bit equality per entry) -- worth trying since it's the
+# right tool, but don't expect bmc's near-instant turnaround.
+pdr: mode prove
+
+[engines]
+bmc: smtbmc boolector
+prove: smtbmc boolector
+pdr: abc pdr
+
+[script]
+read_verilog -sv -formal cam_retrieve.sv
+read_verilog cam.v
+prep -top cam_retrieve_check
+
+[files]
+cam_retrieve.sv
+../rtl/cam.v
